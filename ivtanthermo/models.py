@@ -587,3 +587,16 @@ class Thermo(models.Model):
         managed = False
         db_table = 'thermo'
         db_table_comment = 'Термодинамические и термохимические свойства веществ'
+
+class SubstanceCharge(models.Model):
+    substance_id = models.IntegerField(primary_key=True)
+    charge = models.SmallIntegerField(db_index=True)
+    source_label = models.CharField(max_length=255)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "substance_charge"
+        ordering = ("substance_id",)
+
+    def __str__(self):
+        return f"{self.substance_id}: {self.charge}"

@@ -1,12 +1,19 @@
 import math
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 from scipy.optimize import Bounds, LinearConstraint, minimize
+from django.db import OperationalError, ProgrammingError
 
-from ivtanthermo.models import GibbsCoef, MoleculeAtomRef, Substance, Thermo
+from ivtanthermo.charge_utils import (
+    build_substance_charge_map,
+    coerce_float_array,
+    parse_charge_from_label,
+)
+from ivtanthermo.models import GibbsCoef, MoleculeAtomRef, MoleculeProp, Substance, Thermo
+
+from .models import CustomSubstance
 
 
 NUMERICAL_EPS = 1e-30
@@ -133,6 +140,101 @@ def parse_feed_input(raw_text: str) -> list[tuple[str, float]]:
     return entries
 
 
+def _substance_molar_mass_g_per_mol(substance: Substance) -> float | None:
+    molecule_prop = (
+        MoleculeProp.objects.filter(molecule=substance.molecule)
+        .order_by("-recommended", "id")
+        .first()
+    )
+    if molecule_prop and molecule_prop.mass and molecule_prop.mass > 0:
+        return float(molecule_prop.mass)
+
+    refs = getattr(substance.molecule, "_prefetched_atom_refs", None)
+    if refs is None:
+        refs = MoleculeAtomRef.objects.filter(molecule=substance.molecule).select_related("atom")
+
+    molar_mass = 0.0
+    has_mass_data = False
+    for ref in refs:
+        if ref.atom.charge == -1:
+            continue
+        if ref.atom.mass_num is None:
+            return None
+        has_mass_data = True
+        molar_mass += float(ref.num_elements) * float(ref.atom.mass_num)
+
+    if has_mass_data and molar_mass > 0:
+        return molar_mass
+    return None
+
+
+def _custom_substance_molar_mass_g_per_mol(custom_substance: CustomSubstance) -> float | None:
+    if custom_substance.molar_mass and custom_substance.molar_mass > 0:
+        return float(custom_substance.molar_mass)
+    return None
+
+
+def _safe_builtin_feed_substances(feed_labels: list[str]) -> list[Substance]:
+    try:
+        return list(
+            Substance.objects.filter(label__in=feed_labels)
+            .select_related("molecule", "phase")
+            .prefetch_related("molecule__moleculeatomref_set__atom")
+        )
+    except (OperationalError, ProgrammingError):
+        return []
+
+
+def _safe_all_builtin_substances() -> list[Substance]:
+    try:
+        return list(
+            Substance.objects.select_related("molecule", "phase")
+            .prefetch_related("molecule__moleculeatomref_set__atom")
+        )
+    except (OperationalError, ProgrammingError):
+        return []
+
+
+def convert_feed_entries_to_moles(
+    feed_entries: list[tuple[str, float]],
+    *,
+    feed_basis: str = "mole",
+) -> list[tuple[str, float]]:
+    if feed_basis == "mole":
+        return feed_entries
+    if feed_basis != "mass":
+        raise ValueError(f"Unsupported feed basis: {feed_basis}")
+
+    feed_labels = [label for label, _ in feed_entries]
+    substances = _safe_builtin_feed_substances(feed_labels)
+    custom_substances = list(CustomSubstance.objects.filter(label__in=feed_labels, is_active=True))
+    substance_by_label = {substance.label: substance for substance in substances}
+    custom_by_label = {substance.label: substance for substance in custom_substances}
+    missing = [
+        label for label in feed_labels
+        if label not in substance_by_label and label not in custom_by_label
+    ]
+    if missing:
+        raise ValueError(f"Unknown substance labels: {', '.join(missing)}")
+
+    for substance in substances:
+        substance.molecule._prefetched_atom_refs = list(substance.molecule.moleculeatomref_set.all())
+
+    converted_entries = []
+    for label, amount in feed_entries:
+        if amount < 0:
+            raise ValueError("Feed amounts must be non-negative.")
+        if label in custom_by_label:
+            molar_mass = _custom_substance_molar_mass_g_per_mol(custom_by_label[label])
+        else:
+            substance = substance_by_label[label]
+            molar_mass = _substance_molar_mass_g_per_mol(substance)
+        if molar_mass is None or molar_mass <= 0:
+            raise ValueError(f"Molar mass is unavailable for substance '{label}'.")
+        converted_entries.append((label, amount / molar_mass))
+    return converted_entries
+
+
 def temperature_points(start: float, end: float, step: float) -> list[float]:
     if start <= 0 or end <= 0:
         raise ValueError("Temperature must be positive.")
@@ -156,26 +258,10 @@ def temperature_points(start: float, end: float, step: float) -> list[float]:
     return points
 
 
-def _substance_charge(substance: Substance) -> int:
-    if substance.label == "e(-g)":
-        return -1
-
-    suffix_match = re.search(r"\(([^)]*)\)$", substance.label)
-    if not suffix_match:
-        return 0
-    suffix = suffix_match.group(1)
-
-    explicit_match = re.fullmatch(r"([+-])g;([+-]?\d+)", suffix)
-    if explicit_match:
-        return int(explicit_match.group(2))
-
-    simple_match = re.fullmatch(r"([+-])(\d*)g", suffix)
-    if simple_match:
-        sign = 1 if simple_match.group(1) == "+" else -1
-        magnitude = int(simple_match.group(2) or "1")
-        return sign * magnitude
-
-    return 0
+def _substance_charge(substance: Substance, charge_map: dict[int, int] | None = None) -> int:
+    if charge_map is not None and substance.id in charge_map:
+        return int(charge_map[substance.id])
+    return parse_charge_from_label(substance.label)
 
 
 def _molecule_element_counts(substance: Substance) -> dict[str, float]:
@@ -191,8 +277,16 @@ def _molecule_element_counts(substance: Substance) -> dict[str, float]:
     return counts
 
 
+def _custom_substance_element_counts(custom_substance: CustomSubstance) -> dict[str, float]:
+    return {
+        str(symbol): float(amount)
+        for symbol, amount in (custom_substance.element_counts or {}).items()
+        if float(amount) != 0.0
+    }
+
+
 def _gibbs_rt_from_coefficients(thermo: Thermo, coefficient: GibbsCoef, temperature: float) -> float:
-    f1, f2, f3, f4, f5, f6, f7 = (list(coefficient.data or []) + [0.0] * 7)[:7]
+    f1, f2, f3, f4, f5, f6, f7 = (coerce_float_array(coefficient.data) + [0.0] * 7)[:7]
     x = temperature / 10000.0
     entropy = f1 + f2 * (math.log(x) + 1) - f3 / (x ** 2) + 2 * f5 * x + 3 * f6 * (x ** 2) + 4 * f7 * (x ** 3)
     dh = 10 * (f2 * x - 2 * f3 / x - f4 + f5 * (x ** 2) + 2 * f6 * (x ** 3) + 3 * f7 * (x ** 4))
@@ -201,51 +295,77 @@ def _gibbs_rt_from_coefficients(thermo: Thermo, coefficient: GibbsCoef, temperat
     return gibbs * 1000.0 / (GAS_CONSTANT * temperature)
 
 
+def _custom_gibbs_rt(custom_substance: CustomSubstance, temperature: float) -> float | None:
+    if custom_substance.tmin is not None and temperature < float(custom_substance.tmin):
+        return None
+    if custom_substance.tmax is not None and temperature > float(custom_substance.tmax):
+        return None
+
+    coefficients = coerce_float_array(custom_substance.gibbs_coefficients)
+    if len(coefficients) != 7:
+        raise ValueError(f"Custom substance '{custom_substance.label}' must have exactly 7 Gibbs coefficients.")
+
+    coefficient_stub = type("CoefficientStub", (), {"data": coefficients})()
+    thermo_stub = type("ThermoStub", (), {"dfh0": float(custom_substance.dfh0 or 0.0)})()
+    return _gibbs_rt_from_coefficients(thermo_stub, coefficient_stub, temperature)
+
+
 def build_input_from_database(
     temperature: float,
     feed_entries: list[tuple[str, float]],
     pressure_mpa: float = STANDARD_PRESSURE_MPA,
     include_condensed: bool = True,
     include_ions: bool = False,
+    feed_basis: str = "mole",
 ) -> ParsedEquilibriumInput:
     if pressure_mpa <= 0:
         raise ValueError("Pressure must be positive.")
 
+    feed_entries = convert_feed_entries_to_moles(feed_entries, feed_basis=feed_basis)
+
     feed_labels = [label for label, _ in feed_entries]
-    feed_substances = list(
-        Substance.objects.filter(label__in=feed_labels)
-        .select_related("molecule", "phase")
-        .prefetch_related("molecule__moleculeatomref_set__atom")
-    )
+    feed_substances = _safe_builtin_feed_substances(feed_labels)
+    feed_custom_substances = list(CustomSubstance.objects.filter(label__in=feed_labels, is_active=True))
     substance_by_label = {substance.label: substance for substance in feed_substances}
-    missing = [label for label in feed_labels if label not in substance_by_label]
+    custom_by_label = {substance.label: substance for substance in feed_custom_substances}
+    missing = [
+        label for label in feed_labels
+        if label not in substance_by_label and label not in custom_by_label
+    ]
     if missing:
         raise ValueError(f"Unknown substance labels: {', '.join(missing)}")
 
     for substance in feed_substances:
         substance.molecule._prefetched_atom_refs = list(substance.molecule.moleculeatomref_set.all())
+    feed_charge_map = build_substance_charge_map(feed_substances)
 
     feed_element_symbols: set[str] = set()
     element_amounts_by_symbol: dict[str, float] = {}
     charge_balance = 0.0
     for label, amount in feed_entries:
-        substance = substance_by_label[label]
-        counts = _molecule_element_counts(substance)
-        charge = _substance_charge(substance)
+        if label in custom_by_label:
+            custom_substance = custom_by_label[label]
+            counts = _custom_substance_element_counts(custom_substance)
+            charge = parse_charge_from_label(custom_substance.label)
+        else:
+            substance = substance_by_label[label]
+            counts = _molecule_element_counts(substance)
+            charge = _substance_charge(substance, feed_charge_map)
         for symbol, count in counts.items():
             feed_element_symbols.add(symbol)
             element_amounts_by_symbol[symbol] = element_amounts_by_symbol.get(symbol, 0.0) + count * amount
         charge_balance += charge * amount
 
-    all_substances = list(
-        Substance.objects.select_related("molecule", "phase")
-        .prefetch_related("molecule__moleculeatomref_set__atom")
-    )
+    all_substances = _safe_all_builtin_substances()
     candidates = []
     for substance in all_substances:
         substance.molecule._prefetched_atom_refs = list(substance.molecule.moleculeatomref_set.all())
+    candidate_charge_map = build_substance_charge_map(all_substances)
+    custom_candidates = list(CustomSubstance.objects.filter(is_active=True))
+
+    for substance in all_substances:
         counts = _molecule_element_counts(substance)
-        charge = _substance_charge(substance)
+        charge = _substance_charge(substance, candidate_charge_map)
         symbols = set(counts.keys())
 
         if symbols and not symbols.issubset(feed_element_symbols):
@@ -263,7 +383,39 @@ def build_input_from_database(
 
         candidates.append(
             {
+                "source": "builtin",
+                "label": substance.label,
+                "phase_label": substance.phase.label,
                 "substance": substance,
+                "counts": counts,
+                "charge": charge,
+            }
+        )
+
+    for custom_substance in custom_candidates:
+        counts = _custom_substance_element_counts(custom_substance)
+        charge = parse_charge_from_label(custom_substance.label)
+        symbols = set(counts.keys())
+
+        if symbols and not symbols.issubset(feed_element_symbols):
+            continue
+        if not symbols and charge == 0:
+            continue
+        if not include_ions and charge != 0:
+            continue
+        if not include_condensed and custom_substance.phase != "g":
+            continue
+        if custom_substance.phase != "g" and charge != 0 and not include_condensed:
+            continue
+        if custom_substance.phase != "g" and charge != 0 and not include_ions:
+            continue
+
+        candidates.append(
+            {
+                "source": "custom",
+                "label": custom_substance.label,
+                "phase_label": custom_substance.phase,
+                "custom_substance": custom_substance,
                 "counts": counts,
                 "charge": charge,
             }
@@ -272,8 +424,13 @@ def build_input_from_database(
     if not candidates:
         raise ValueError("No candidate substances were found in the database for the selected element system.")
 
+    builtin_substance_ids = [
+        row["substance"].id
+        for row in candidates
+        if row["source"] == "builtin"
+    ]
     thermo_qs = (
-        Thermo.objects.filter(substance_id__in=[row["substance"].id for row in candidates])
+        Thermo.objects.filter(substance_id__in=builtin_substance_ids)
         .select_related("substance")
         .order_by("-recommended", "id")
     )
@@ -295,21 +452,26 @@ def build_input_from_database(
 
     valid_candidates = []
     for row in candidates:
-        thermo = thermo_by_substance.get(row["substance"].id)
-        coefficient = coefficient_by_thermo.get(thermo.id) if thermo else None
-        if thermo is None or coefficient is None:
-            continue
-        g_rt = _gibbs_rt_from_coefficients(thermo, coefficient, temperature)
-        if row["substance"].phase.label == "g":
+        if row["source"] == "custom":
+            g_rt = _custom_gibbs_rt(row["custom_substance"], temperature)
+            if g_rt is None:
+                continue
+        else:
+            thermo = thermo_by_substance.get(row["substance"].id)
+            coefficient = coefficient_by_thermo.get(thermo.id) if thermo else None
+            if thermo is None or coefficient is None:
+                continue
+            g_rt = _gibbs_rt_from_coefficients(thermo, coefficient, temperature)
+        if row["phase_label"] == "g":
             g_rt += math.log(pressure_mpa / STANDARD_PRESSURE_MPA)
-        valid_candidates.append({**row, "thermo": thermo, "g_rt": g_rt})
+        valid_candidates.append({**row, "g_rt": g_rt})
 
     if not valid_candidates:
         raise ValueError("No thermodynamic data covering the selected temperature were found in the database.")
 
     ordered_candidates = sorted(
         valid_candidates,
-        key=lambda row: (1 if row["substance"].phase.label == "g" else 0, row["substance"].label),
+        key=lambda row: (1 if row["phase_label"] == "g" else 0, row["label"]),
     )
 
     include_charge_dimension = any(row["charge"] != 0 for row in ordered_candidates) or abs(charge_balance) > 0
@@ -321,7 +483,7 @@ def build_input_from_database(
     gibbs_values = []
     formula_rows = []
     for row in ordered_candidates:
-        species.append(row["substance"].label)
+        species.append(row["label"])
         gibbs_values.append(row["g_rt"])
         formula_row = [row["counts"].get(symbol, 0.0) for symbol in element_order if symbol != "charge"]
         if include_charge_dimension:
@@ -332,7 +494,7 @@ def build_input_from_database(
     if include_charge_dimension:
         element_amounts.append(charge_balance)
 
-    nc = sum(1 for row in ordered_candidates if row["substance"].phase.label != "g")
+    nc = sum(1 for row in ordered_candidates if row["phase_label"] != "g")
     gas_count = len(ordered_candidates) - nc
     phase_ranges = [(nc, len(ordered_candidates) - 1)] if gas_count > 0 else []
 

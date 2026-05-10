@@ -16,7 +16,6 @@
     .picker-grid,
     .conditions-grid,
     .save-grid,
-    .chart-grid,
     .legend-grid {
         display: grid;
         gap: 12px;
@@ -33,65 +32,9 @@
     }
 
     .save-grid {
-        grid-template-columns: minmax(0, 1.8fr) auto auto;
+        grid-template-columns: minmax(0, 1.8fr) auto;
         align-items: end;
         margin-top: 16px;
-    }
-
-    .chart-grid {
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    }
-
-    .chart-panel {
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        border-radius: 8px;
-        padding: 16px;
-        background: rgba(15, 23, 42, 0.18);
-    }
-
-    .chart-list {
-        display: grid;
-        gap: 10px;
-    }
-
-    .chart-row {
-        display: grid;
-        grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr) auto;
-        gap: 12px;
-        align-items: center;
-    }
-
-    .chart-label {
-        font-size: 0.92rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .chart-bar {
-        height: 12px;
-        border-radius: 999px;
-        background: rgba(148, 163, 184, 0.2);
-        overflow: hidden;
-        position: relative;
-    }
-
-    .chart-bar-fill {
-        position: absolute;
-        inset: 0 auto 0 0;
-        border-radius: 999px;
-        background: linear-gradient(90deg, #38bdf8 0%, #22c55e 100%);
-    }
-
-    .chart-value {
-        font-variant-numeric: tabular-nums;
-        font-size: 0.92rem;
-    }
-
-    .chart-meta {
-        margin-top: 4px;
-        font-size: 0.82rem;
-        color: rgba(148, 163, 184, 0.92);
     }
 
     .history-row-active {
@@ -118,32 +61,129 @@
         content: "-";
     }
 
-    .sweep-legend {
+    .plotly-frame {
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.08);
+        padding: 8px;
+    }
+
+    .csv-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .loading-overlay[hidden] {
+        display: none;
+    }
+
+    .loading-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
         display: flex;
         align-items: center;
-        gap: 8px;
-        font-size: 0.9rem;
-        min-width: 0;
+        justify-content: center;
+        padding: 24px;
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(3px);
     }
 
-    .sweep-legend-swatch {
-        width: 12px;
-        height: 12px;
+    .loading-card {
+        width: min(460px, 100%);
+        padding: 28px;
+        border-radius: 8px;
+        border: 1px solid rgba(217, 224, 232, 0.5);
+        background: #ffffff;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+    }
+
+    .loading-brand {
+        font-size: 24px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .loading-title {
+        margin: 6px 0 0;
+        font-size: 20px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .loading-message {
+        margin: 8px 0 0;
+        color: #475569;
+    }
+
+    .loading-spinner {
+        width: 44px;
+        height: 44px;
+        margin: 18px 0 0;
         border-radius: 999px;
-        flex: 0 0 auto;
+        border: 4px solid rgba(15, 118, 110, 0.18);
+        border-top-color: #0f766e;
+        animation: equilibrium-spin 0.9s linear infinite;
     }
 
-    .sweep-svg {
-        width: 100%;
-        height: auto;
-        display: block;
+    .loading-stages {
+        display: grid;
+        gap: 10px;
+        margin: 18px 0 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .loading-stage {
+        display: grid;
+        grid-template-columns: 18px 1fr;
+        gap: 10px;
+        align-items: center;
+        color: #64748b;
+        font-size: 14px;
+    }
+
+    .loading-stage::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: #cbd5e1;
+    }
+
+    .loading-stage.is-active {
+        color: #0f172a;
+        font-weight: 600;
+    }
+
+    .loading-stage.is-active::before {
+        background: #0f766e;
+        box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.14);
+    }
+
+    .loading-stage.is-complete::before {
+        background: #16a34a;
+    }
+
+    body.is-loading {
+        overflow: hidden;
+    }
+
+    @keyframes equilibrium-spin {
+        from {
+            transform: rotate(0deg);
+        }
+
+        to {
+            transform: rotate(360deg);
+        }
     }
 
     @media (max-width: 1000px) {
         .conditions-grid,
         .save-grid,
-        .picker-grid,
-        .chart-row {
+        .picker-grid {
             grid-template-columns: 1fr;
         }
     }
@@ -162,11 +202,141 @@
         </div>
     {% endif %}
 
+    {% if custom_substance_message %}
+        <div class="form-errors" style="margin-bottom: 16px; color: #dbeafe; border-color: rgba(59, 130, 246, 0.35); background: rgba(30, 64, 175, 0.18);">
+            {{ custom_substance_message }}
+        </div>
+    {% endif %}
+
     {% if db_form.non_field_errors %}
         <div class="form-errors" style="margin-bottom: 16px;">
             {% for error in db_form.non_field_errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
         </div>
     {% endif %}
+
+    <details class="section summary-details" style="margin-bottom: 24px;"{% if custom_substance_form.errors or custom_substance_message %} open{% endif %}>
+        <summary>Добавить пользовательское вещество</summary>
+        <div style="margin-top: 16px;">
+        <h2 style="margin-top: 0;">Пользовательские вещества</h2>
+        <p class="subtle">Эти вещества сохраняются в локальной базе и становятся доступны в расчёте наравне со штатным каталогом.</p>
+
+        {% if custom_substance_form.non_field_errors %}
+            <div class="form-errors" style="margin-bottom: 16px;">
+                {% for error in custom_substance_form.non_field_errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+            </div>
+        {% endif %}
+
+        <form method="post" style="margin-top: 20px;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_custom_substance">
+            <div class="conditions-grid" style="grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.8fr);">
+                <div class="field">
+                    <label for="{{ custom_substance_form.label.id_for_label }}">Label</label>
+                    {{ custom_substance_form.label }}
+                    {% if custom_substance_form.label.errors %}<div class="form-errors">{{ custom_substance_form.label.errors|join:", " }}</div>{% endif %}
+                </div>
+                <div class="field">
+                    <label for="{{ custom_substance_form.display_name.id_for_label }}">Название</label>
+                    {{ custom_substance_form.display_name }}
+                </div>
+                <div class="field">
+                    <label for="{{ custom_substance_form.phase.id_for_label }}">Фаза</label>
+                    {{ custom_substance_form.phase }}
+                    {% if custom_substance_form.phase.errors %}<div class="form-errors">{{ custom_substance_form.phase.errors|join:", " }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="conditions-grid" style="margin-top: 16px;">
+                <div class="field">
+                    <label for="{{ custom_substance_form.molar_mass.id_for_label }}">Молярная масса, г/моль</label>
+                    {{ custom_substance_form.molar_mass }}
+                    {% if custom_substance_form.molar_mass.errors %}<div class="form-errors">{{ custom_substance_form.molar_mass.errors|join:", " }}</div>{% endif %}
+                </div>
+                <div class="field">
+                    <label for="{{ custom_substance_form.dfh0.id_for_label }}">dfh0, Дж/моль</label>
+                    {{ custom_substance_form.dfh0 }}
+                    {% if custom_substance_form.dfh0.errors %}<div class="form-errors">{{ custom_substance_form.dfh0.errors|join:", " }}</div>{% endif %}
+                </div>
+                <div class="field">
+                    <label for="{{ custom_substance_form.tmin.id_for_label }}">Tmin, K</label>
+                    {{ custom_substance_form.tmin }}
+                    {% if custom_substance_form.tmin.errors %}<div class="form-errors">{{ custom_substance_form.tmin.errors|join:", " }}</div>{% endif %}
+                </div>
+                <div class="field">
+                    <label for="{{ custom_substance_form.tmax.id_for_label }}">Tmax, K</label>
+                    {{ custom_substance_form.tmax }}
+                    {% if custom_substance_form.tmax.errors %}<div class="form-errors">{{ custom_substance_form.tmax.errors|join:", " }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="conditions-grid" style="margin-top: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);">
+                <div class="field">
+                    <label for="{{ custom_substance_form.element_counts_input.id_for_label }}">Элементный состав</label>
+                    <div class="code-note input-note">По одной строке: <code>элемент количество</code>
+Example:
+X 1
+O 2</div>
+                    {{ custom_substance_form.element_counts_input }}
+                    {% if custom_substance_form.element_counts_input.errors %}<div class="form-errors">{{ custom_substance_form.element_counts_input.errors|join:", " }}</div>{% endif %}
+                </div>
+                <div class="field">
+                    <label for="{{ custom_substance_form.gibbs_coefficients_input.id_for_label }}">Коэффициенты Гиббса</label>
+                    <div class="code-note input-note">Ровно 7 коэффициентов через пробел или с новой строки.</div>
+                    {{ custom_substance_form.gibbs_coefficients_input }}
+                    {% if custom_substance_form.gibbs_coefficients_input.errors %}<div class="form-errors">{{ custom_substance_form.gibbs_coefficients_input.errors|join:", " }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="field" style="margin-top: 16px;">
+                <label for="{{ custom_substance_form.note.id_for_label }}">Примечание</label>
+                {{ custom_substance_form.note }}
+            </div>
+
+            <div class="save-grid">
+                <button class="button" type="submit">Сохранить вещество</button>
+            </div>
+        </form>
+
+        <div style="margin-top: 24px;">
+            <h3 style="margin-top: 0;">Текущий список</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Label</th>
+                    <th>Название</th>
+                    <th>Фаза</th>
+                    <th>M, г/моль</th>
+                    <th>T, K</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for item in custom_substances %}
+                    <tr>
+                        <td>{{ item.label }}</td>
+                        <td>{{ item.display_name|default:"-" }}</td>
+                        <td>{{ item.phase }}</td>
+                        <td>{{ item.molar_mass|floatformat:6 }}</td>
+                        <td>{{ item.tmin|floatformat:0 }} - {{ item.tmax|floatformat:0 }}</td>
+                        <td>
+                            <form method="post" style="margin: 0;">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete_custom_substance">
+                                <input type="hidden" name="custom_substance_id" value="{{ item.id }}">
+                                <button class="button" type="submit" style="background: #7f1d1d;">Удалить</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6" class="empty">Пользовательских веществ пока нет.</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        </div>
+    </details>
 
     <form method="post">
         {% csrf_token %}
@@ -191,10 +361,14 @@
             </div>
         </div>
 
-        <div class="conditions-grid" style="margin-top: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);">
+        <div class="conditions-grid" style="margin-top: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr);">
             <div class="field">
                 <label for="{{ db_form.mode.id_for_label }}">Objective</label>
                 {{ db_form.mode }}
+            </div>
+            <div class="field">
+                <label for="{{ db_form.feed_basis.id_for_label }}">Состав feed</label>
+                {{ db_form.feed_basis }}
             </div>
             <div class="field" style="display: flex; gap: 18px; align-items: end; flex-wrap: wrap;">
                 <label class="field" style="display: flex; align-items: center; gap: 8px; margin: 0;">
@@ -210,7 +384,8 @@
 
         <div class="field" style="margin-top: 16px;">
             <label for="{{ db_form.feed_input.id_for_label }}">Исходные вещества</label>
-            <div class="code-note input-note">One substance per line: <code>&lt;label&gt; &lt;amount&gt;</code>
+            <div id="feed-input-note" class="code-note input-note">One substance per line: <code>&lt;label&gt; &lt;amount&gt;</code>
+For mole basis: amount in mol. For mass basis: amount in g.
 Example:
 C2O(g) 1.0
 O2(g) 0.25</div>
@@ -225,7 +400,7 @@ O2(g) 0.25</div>
                     </datalist>
                 </div>
                 <div class="field" style="margin: 0;">
-                    <label for="db-substance-amount">Количество</label>
+                    <label id="db-substance-amount-label" for="db-substance-amount">Количество, mol</label>
                     <input id="db-substance-amount" type="number" step="any" min="0" value="1">
                 </div>
                 <button class="button" type="button" id="db-add-substance">Добавить вещество</button>
@@ -237,13 +412,17 @@ O2(g) 0.25</div>
             </div>
         </div>
 
-        <div class="save-grid">
-            <div class="field" style="margin: 0;">
-                <label for="save-name-database">Имя сохранения</label>
-                <input id="save-name-database" type="text" name="save_name_database" value="{{ default_save_name_database }}">
+        {% if result and source == "database" %}
+            <div class="conditions-grid" style="margin-top: 16px; grid-template-columns: minmax(0, 1fr);">
+                <div class="field">
+                    <label for="{{ db_form.temperature_report.id_for_label }}">Температура таблицы, K</label>
+                    {{ db_form.temperature_report }}
+                </div>
             </div>
+        {% endif %}
+
+        <div class="save-grid">
             <button class="button" type="submit" name="action" value="calculate">Рассчитать</button>
-            <button class="button" type="submit" name="action" value="save" style="background: #0f766e;">Сохранить расчёт</button>
         </div>
     </form>
 </section>
@@ -286,7 +465,7 @@ O2(g) 0.25</div>
             <h2 style="margin-top: 0;">Результат</h2>
             <div class="stats-grid">
                 <div class="stat">
-                    <div class="stat-label">Температура диапазона</div>
+                    <div class="stat-label">Температурный диапазон</div>
                     <div class="stat-value">{{ current_temperature_start }} - {{ current_temperature_end }} K</div>
                 </div>
                 <div class="stat">
@@ -297,103 +476,119 @@ O2(g) 0.25</div>
                     <div class="stat-label">Давление</div>
                     <div class="stat-value">{{ current_pressure_mpa }} MPa</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">Опорная температура</div>
-                    <div class="stat-value">{% if primary_temperature %}{{ primary_temperature|floatformat:2 }} K{% else %}-{% endif %}</div>
-                </div>
+                {% if primary_temperature %}
+                    <div class="stat">
+                        <div class="stat-label">Температура таблицы</div>
+                        <div class="stat-value">{{ primary_temperature|floatformat:2 }} K</div>
+                    </div>
+                {% endif %}
             </div>
         </section>
     {% endif %}
 
-    {% if temperature_chart %}
+    {% if plotly_js %}
+        <script>{{ plotly_js|safe }}</script>
+    {% endif %}
+
+    {% if temperature_plot_html %}
         <section class="section">
             <h2 style="margin-top: 0;">Зависимость мольных долей веществ от температуры</h2>
-            <div class="chart-panel">
-                <svg class="sweep-svg" viewBox="0 0 {{ temperature_chart.width }} {{ temperature_chart.height }}" role="img" aria-label="Temperature sweep chart">
-                    <rect x="0" y="0" width="{{ temperature_chart.width }}" height="{{ temperature_chart.height }}" fill="transparent"></rect>
-                    {% for tick in temperature_chart.y_ticks %}
-                        <line x1="{{ temperature_chart.margin_left }}" y1="{{ tick.y|floatformat:2 }}" x2="{{ temperature_chart.margin_left|add:temperature_chart.plot_width }}" y2="{{ tick.y|floatformat:2 }}" stroke="rgba(148, 163, 184, 0.18)" stroke-width="1"></line>
-                        <text x="{{ temperature_chart.margin_left|add:'-12' }}" y="{{ tick.y|floatformat:2 }}" text-anchor="end" dominant-baseline="middle" fill="rgba(148, 163, 184, 0.92)" font-size="12">{{ tick.value|floatformat:2 }}</text>
-                    {% endfor %}
-                    {% for tick in temperature_chart.x_ticks %}
-                        <line x1="{{ tick.x|floatformat:2 }}" y1="{{ temperature_chart.margin_top }}" x2="{{ tick.x|floatformat:2 }}" y2="{{ temperature_chart.margin_top|add:temperature_chart.plot_height }}" stroke="rgba(148, 163, 184, 0.12)" stroke-width="1"></line>
-                        <text x="{{ tick.x|floatformat:2 }}" y="{{ temperature_chart.margin_top|add:temperature_chart.plot_height|add:'24' }}" text-anchor="middle" fill="rgba(148, 163, 184, 0.92)" font-size="12">{{ tick.value|floatformat:0 }}</text>
-                    {% endfor %}
-                    <line x1="{{ temperature_chart.margin_left }}" y1="{{ temperature_chart.margin_top|add:temperature_chart.plot_height }}" x2="{{ temperature_chart.margin_left|add:temperature_chart.plot_width }}" y2="{{ temperature_chart.margin_top|add:temperature_chart.plot_height }}" stroke="rgba(148, 163, 184, 0.35)" stroke-width="1.25"></line>
-                    <line x1="{{ temperature_chart.margin_left }}" y1="{{ temperature_chart.margin_top }}" x2="{{ temperature_chart.margin_left }}" y2="{{ temperature_chart.margin_top|add:temperature_chart.plot_height }}" stroke="rgba(148, 163, 184, 0.35)" stroke-width="1.25"></line>
-                    {% for item in temperature_chart.series %}
-                        <path d="{{ item.path }}" fill="none" stroke="{{ item.color }}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
-                        {% for point in item.points %}
-                            <circle cx="{{ point.x|floatformat:2 }}" cy="{{ point.y|floatformat:2 }}" r="3.4" fill="{{ item.color }}">
-                                <title>{{ item.name }} | T={{ point.temperature|floatformat:2 }} K | x={{ point.value|floatformat:6 }}</title>
-                            </circle>
-                        {% endfor %}
-                    {% endfor %}
-                    <text x="{{ temperature_chart.margin_left|add:temperature_chart.plot_width }}" y="{{ temperature_chart.height|add:'-8' }}" text-anchor="end" fill="rgba(148, 163, 184, 0.92)" font-size="12">Temperature, K</text>
-                    <text x="18" y="{{ temperature_chart.margin_top|add:'4' }}" fill="rgba(148, 163, 184, 0.92)" font-size="12">Mole fraction</text>
-                </svg>
-            </div>
-            <div class="legend-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 16px;">
-                {% for item in temperature_chart.series %}
-                    <div class="sweep-legend">
-                        <span class="sweep-legend-swatch" style="background: {{ item.color }};"></span>
-                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ item.name }}</span>
-                        <span class="subtle">x(T<sub>max</sub>)={{ item.latest_value|floatformat:4 }}</span>
-                    </div>
-                {% endfor %}
+            <div class="plotly-frame">
+                {{ temperature_plot_html|safe }}
             </div>
         </section>
     {% endif %}
 
-    {% if species_chart or phase_chart %}
+    {% if concentration_rows and source != "database" or concentration_rows and current_temperature_report %}
         <section class="section">
-            <h2 style="margin-top: 0;">Состав при опорной температуре</h2>
-            <div class="chart-grid">
-                {% if species_chart %}
-                    <div class="chart-panel">
-                        <h3 style="margin-top: 0;">Равновесный состав</h3>
-                        <div class="chart-list">
-                            {% for item in species_chart %}
-                                <div>
-                                    <div class="chart-row">
-                                        <div class="chart-label" title="{{ item.label }}">{{ item.label }}</div>
-                                        <div class="chart-bar" title="{{ item.label }}: {{ item.value|floatformat:12 }}">
-                                            <div class="chart-bar-fill" style="width: {{ item.relative|floatformat:2 }}%;"></div>
-                                        </div>
-                                        <div class="chart-value">{{ item.value|floatformat:6 }}</div>
-                                    </div>
-                                    <div class="chart-meta">{{ item.meta }}</div>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                {% endif %}
-                {% if phase_chart %}
-                    <div class="chart-panel">
-                        <h3 style="margin-top: 0;">Фазовые количества</h3>
-                        <div class="chart-list">
-                            {% for item in phase_chart %}
-                                <div>
-                                    <div class="chart-row">
-                                        <div class="chart-label" title="{{ item.label }}">{{ item.label }}</div>
-                                        <div class="chart-bar" title="{{ item.label }}: {{ item.value|floatformat:12 }}">
-                                            <div class="chart-bar-fill" style="width: {{ item.relative|floatformat:2 }}%;"></div>
-                                        </div>
-                                        <div class="chart-value">{{ item.value|floatformat:6 }}</div>
-                                    </div>
-                                    <div class="chart-meta">{{ item.meta }}</div>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                {% endif %}
+            <h2 style="margin-top: 0;">{% if current_temperature_report %}Концентрации при {{ current_temperature_report }} K{% else %}Концентрации{% endif %}</h2>
+            <table>
+                <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Вещество</th>
+                    <th>Количество, моль</th>
+                    <th>Мольная доля</th>
+                    <th>g / RT</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for row in concentration_rows %}
+                    <tr>
+                        <td>{{ row.index }}</td>
+                        <td>{{ row.species }}</td>
+                        <td>{{ row.amount|floatformat:12 }}</td>
+                        <td>{{ row.mole_fraction|floatformat:8 }}</td>
+                        <td>{{ row.g_rt|floatformat:6 }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="5" class="empty">Нет веществ, превышающих порог вывода.</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    {% endif %}
+
+    {% if csv_exports %}
+        <section class="section">
+            <h2 style="margin-top: 0;">CSV выгрузки</h2>
+            <div class="csv-actions">
+                {% for export in csv_exports %}
+                    <button
+                        class="button csv-download"
+                        type="button"
+                        data-filename="{{ export.filename }}"
+                        data-source="{{ export.slug }}"
+                    >
+                        {{ export.label }}
+                    </button>
+                {% endfor %}
             </div>
+            {% for export in csv_exports %}
+                <textarea id="{{ export.slug }}" hidden>{{ export.content }}</textarea>
+            {% endfor %}
+        </section>
+    {% endif %}
+
+    {% if result_payload_json %}
+        <section class="section">
+            <h2 style="margin-top: 0;">Save Result</h2>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_result">
+                <input type="hidden" name="source" value="{{ source }}">
+                <textarea name="result_payload" hidden>{{ result_payload_json }}</textarea>
+                {% if source == "database" %}
+                    <input type="hidden" name="mode" value="{{ db_form.mode.value }}">
+                    <input type="hidden" name="temperature_start" value="{{ current_temperature_start }}">
+                    <input type="hidden" name="temperature_end" value="{{ current_temperature_end }}">
+                    <input type="hidden" name="temperature_step" value="{{ db_form.temperature_step.value }}">
+                    <input type="hidden" name="temperature_report" value='{{ current_temperature_report|default:"" }}'>
+                    <input type="hidden" name="pressure_mpa" value="{{ current_pressure_mpa }}">
+                    <input type="hidden" name="feed_basis" value="{{ current_feed_basis }}">
+                    <textarea name="feed_input" hidden>{{ current_feed_input }}</textarea>
+                    {% if current_include_condensed %}<input type="hidden" name="include_condensed" value="on">{% endif %}
+                    {% if current_include_ions %}<input type="hidden" name="include_ions" value="on">{% endif %}
+                {% else %}
+                    <input type="hidden" name="mode" value="{{ current_manual_mode }}">
+                    <input type="hidden" name="example" value="{{ current_manual_example }}">
+                    <textarea name="raw_input" hidden>{{ current_manual_raw_input }}</textarea>
+                {% endif %}
+                <div class="save-grid">
+                    <div class="field" style="margin: 0;">
+                        <label for="save-name-result">Save name</label>
+                        <input id="save-name-result" type="text" name="save_name_result" value="{% if source == 'database' %}{{ default_save_name_database }}{% else %}{{ default_save_name_manual }}{% endif %}">
+                    </div>
+                    <button class="button" type="submit">Save result</button>
+                </div>
+            </form>
         </section>
     {% endif %}
 
     <details class="section summary-details"{% if details_section_open %} open{% endif %}>
-        <summary>Показать детали расчёта</summary>
-
+        <summary>Show calculation details</summary>
         <div style="margin-top: 20px;">
             {% if parsed %}
                 <section>
@@ -443,88 +638,16 @@ O2(g) 0.25</div>
             {% if temperature_table %}
                 <section class="section" style="padding-inline: 0; border: 0; background: transparent;">
                     <h3 style="margin-top: 0;">Температурная серия</h3>
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>T, K</th>
-                            <th>Success</th>
-                            <th>Objective</th>
-                            <th>Dominant species</th>
-                            <th>Visible species</th>
-                            <th>Residual</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {% for row in temperature_table %}
-                            <tr>
-                                <td>{{ row.temperature|floatformat:2 }}</td>
-                                <td>{% if row.success %}Yes{% else %}No{% endif %}</td>
-                                <td>{{ row.objective|floatformat:6 }}</td>
-                                <td>{{ row.dominant_species }}</td>
-                                <td>{{ row.species_count }}</td>
-                                <td>{{ row.mass_balance_residual|floatformat:6 }}</td>
-                            </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
+                    <div class="subtle">Подробные данные серии доступны в CSV выгрузке.</div>
                 </section>
             {% endif %}
 
-            <section class="section" style="padding-inline: 0; border: 0; background: transparent;">
-                <h3 style="margin-top: 0;">Равновесный состав</h3>
-                <table>
-                    <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Вещество</th>
-                        <th>Количество, моль</th>
-                        <th>g / RT</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for row in rows %}
-                        <tr>
-                            <td>{{ row.index }}</td>
-                            <td>{{ row.species }}</td>
-                            <td>{{ row.amount|floatformat:12 }}</td>
-                            <td>{{ row.g_rt|floatformat:6 }}</td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="4" class="empty">Нет веществ, превышающих порог вывода.</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </section>
-
-            <section class="section" style="padding-inline: 0; border: 0; background: transparent;">
-                <h3 style="margin-top: 0;">Суммы по фазам</h3>
-                <table>
-                    <thead>
-                    <tr>
-                        <th>Фаза</th>
-                        <th>Индексы веществ</th>
-                        <th>Количество фазы</th>
-                        <th>Вещества</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for row in phases %}
-                        <tr>
-                            <td>{{ row.phase_index }}</td>
-                            <td>{{ row.start }} - {{ row.end }}</td>
-                            <td>{{ row.amount|floatformat:12 }}</td>
-                            <td>{{ row.species|join:", " }}</td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="4" class="empty">Фазовые блоки отсутствуют.</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </section>
+            {% if csv_exports %}
+                <section class="section" style="padding-inline: 0; border: 0; background: transparent;">
+                    <h3 style="margin-top: 0;">CSV exports</h3>
+                    <div class="subtle">Полные численные результаты доступны в CSV файлах.</div>
+                </section>
+            {% endif %}
 
             {% if multipliers %}
                 <section class="section" style="padding-inline: 0; border: 0; background: transparent;">
@@ -582,34 +705,71 @@ next m lines: elemental amounts</div>
             {{ form.raw_input }}
         </div>
         <div class="save-grid">
-            <div class="field" style="margin: 0;">
-                <label for="save-name-manual">Имя сохранения</label>
-                <input id="save-name-manual" type="text" name="save_name_manual" value="{{ default_save_name_manual }}">
-            </div>
-            <button class="button" type="submit" name="action" value="calculate">Рассчитать вручную</button>
-            <button class="button" type="submit" name="action" value="save" style="background: #0f766e;">Сохранить расчёт</button>
+            <button class="button" type="submit" name="action" value="calculate">Calculate manual</button>
         </div>
     </form>
 </details>
 
+<div id="equilibrium-loading-overlay" class="loading-overlay" hidden aria-hidden="true">
+    <div class="loading-card" role="status" aria-live="polite">
+        <div class="loading-brand">Equilibr</div>
+        <h2 class="loading-title">Выполняется расчёт</h2>
+        <p id="equilibrium-loading-message" class="loading-message">Подготовка запроса...</p>
+        <div class="loading-spinner" aria-hidden="true"></div>
+        <ol class="loading-stages">
+            <li class="loading-stage is-active" data-stage-index="0">Подготовка входных данных</li>
+            <li class="loading-stage" data-stage-index="1">Отправка задачи на сервер</li>
+            <li class="loading-stage" data-stage-index="2">Численное решение</li>
+            <li class="loading-stage" data-stage-index="3">Формирование результатов</li>
+        </ol>
+    </div>
+</div>
+
 <script>
     const exampleSelect = document.getElementById("{{ form.example.id_for_label }}");
+    const feedBasisInput = document.getElementById("{{ db_form.feed_basis.id_for_label }}");
+    const feedInput = document.getElementById("{{ db_form.feed_input.id_for_label }}");
+    const feedInputNote = document.getElementById("feed-input-note");
+    const substanceLabelInput = document.getElementById("db-substance-label");
+    const substanceAmountInput = document.getElementById("db-substance-amount");
+    const substanceAmountLabel = document.getElementById("db-substance-amount-label");
+    const addSubstanceButton = document.getElementById("db-add-substance");
+    const clearFeedButton = document.getElementById("db-clear-feed");
+
     if (exampleSelect) {
         exampleSelect.addEventListener("change", function () {
+            const url = new URL(window.location.href);
             if (this.value) {
-                const url = new URL(window.location.href);
                 url.searchParams.set("example", this.value);
-                url.searchParams.delete("saved");
-                window.location.href = url.toString();
+            } else {
+                url.searchParams.delete("example");
             }
+            url.searchParams.delete("saved");
+            window.location.href = url.toString();
         });
     }
 
-    const feedInput = document.getElementById("{{ db_form.feed_input.id_for_label }}");
-    const substanceLabelInput = document.getElementById("db-substance-label");
-    const substanceAmountInput = document.getElementById("db-substance-amount");
-    const addSubstanceButton = document.getElementById("db-add-substance");
-    const clearFeedButton = document.getElementById("db-clear-feed");
+    function updateFeedBasisUI() {
+        const basis = feedBasisInput ? feedBasisInput.value : "mole";
+        const unit = basis === "mass" ? "g" : "mol";
+        if (substanceAmountLabel) {
+            substanceAmountLabel.textContent = `Количество, ${unit}`;
+        }
+        if (feedInputNote) {
+            feedInputNote.innerHTML = [
+                "One substance per line: <code>&lt;label&gt; &lt;amount&gt;</code>",
+                "For mole basis: amount in mol. For mass basis: amount in g.",
+                "Example:",
+                basis === "mass" ? "C2O(g) 28.01" : "C2O(g) 1.0",
+                basis === "mass" ? "O2(g) 8.0" : "O2(g) 0.25",
+            ].join("\n");
+        }
+    }
+
+    if (feedBasisInput) {
+        feedBasisInput.addEventListener("change", updateFeedBasisUI);
+        updateFeedBasisUI();
+    }
 
     if (feedInput && substanceLabelInput && substanceAmountInput && addSubstanceButton) {
         const appendFeedRow = function () {
@@ -649,5 +809,114 @@ next m lines: elemental amounts</div>
             feedInput.value = "";
         });
     }
+
+    const loadingOverlay = document.getElementById("equilibrium-loading-overlay");
+    const loadingMessage = document.getElementById("equilibrium-loading-message");
+    const loadingStages = loadingOverlay
+        ? Array.from(loadingOverlay.querySelectorAll(".loading-stage"))
+        : [];
+
+    function setLoadingStage(activeIndex) {
+        loadingStages.forEach(function (stage, index) {
+            stage.classList.remove("is-active", "is-complete");
+            if (index < activeIndex) {
+                stage.classList.add("is-complete");
+            } else if (index === activeIndex) {
+                stage.classList.add("is-active");
+            }
+        });
+    }
+
+    function showLoadingOverlay(message, schedule) {
+        if (!loadingOverlay || !loadingMessage) {
+            return;
+        }
+
+        loadingMessage.textContent = message;
+        setLoadingStage(0);
+        loadingOverlay.hidden = false;
+        loadingOverlay.setAttribute("aria-hidden", "false");
+        document.body.classList.add("is-loading");
+
+        function advance(index) {
+            if (index >= schedule.length) {
+                return;
+            }
+            window.setTimeout(function () {
+                setLoadingStage(schedule[index].stage);
+                loadingMessage.textContent = schedule[index].message;
+                advance(index + 1);
+            }, schedule[index].delay);
+        }
+
+        advance(0);
+    }
+
+    function loadingConfigForSubmit(form, submitter) {
+        const sourceInput = form.querySelector('input[name="source"]');
+        const sourceValue = sourceInput ? sourceInput.value : "";
+        const actionValue = submitter && submitter.value ? submitter.value : "calculate";
+
+        if (actionValue === "save_result") {
+            return {
+                message: "Сохранение рассчитанного результата...",
+                schedule: [
+                    {delay: 250, stage: 1, message: "Отправка результата на сервер..."},
+                    {delay: 1000, stage: 3, message: "Запись результата в базу данных..."},
+                ],
+            };
+        }
+        if (sourceValue === "manual") {
+            return {
+                message: "Подготовка ручного расчёта...",
+                schedule: [
+                    {delay: 350, stage: 1, message: "Запрос отправлен. Ожидание начала расчёта..."},
+                    {delay: 1400, stage: 2, message: "Идёт численное решение. Это может занять время..."},
+                    {delay: 4500, stage: 3, message: "Формирование результатов и CSV..."},
+                ],
+            };
+        }
+        return {
+            message: "Подготовка расчёта по данным из базы...",
+            schedule: [
+                {delay: 350, stage: 1, message: "Запрос отправлен. Ожидание начала расчёта..."},
+                {delay: 1400, stage: 2, message: "Идёт численное решение. Это может занять время..."},
+                {delay: 4500, stage: 3, message: "Формирование результатов, графиков и CSV..."},
+            ],
+        };
+    }
+
+    document.querySelectorAll('form[method="post"]').forEach(function (form) {
+        form.addEventListener("submit", function (event) {
+            const submitter = event.submitter || null;
+            const buttons = Array.from(form.querySelectorAll('button[type="submit"]'));
+            buttons.forEach(function (button) {
+                button.disabled = true;
+            });
+            const config = loadingConfigForSubmit(form, submitter);
+            showLoadingOverlay(config.message, config.schedule);
+        });
+    });
+
+    document.querySelectorAll(".csv-download").forEach(function (button) {
+        button.addEventListener("click", function () {
+            const sourceId = this.dataset.source;
+            const filename = this.dataset.filename;
+            const sourceNode = document.getElementById(sourceId);
+            if (!sourceNode) {
+                return;
+            }
+
+            const blob = new Blob([sourceNode.value], {type: "text/csv;charset=utf-8;"});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        });
+    });
 </script>
 {% endblock %}

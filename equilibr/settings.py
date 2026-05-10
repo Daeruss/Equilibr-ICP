@@ -78,16 +78,12 @@ WSGI_APPLICATION = 'equilibr.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-USE_SQLITE = os.getenv('USE_SQLITE', '').lower() in {'1', 'true', 'yes'}
+TRUTHY_VALUES = {'1', 'true', 'yes', 'on'}
+USE_SQLITE = os.getenv('USE_SQLITE', '').lower() in TRUTHY_VALUES
+USE_POSTGRES = os.getenv('USE_POSTGRES', '').lower() in TRUTHY_VALUES
+SQLITE_NAME = os.getenv('SQLITE_NAME', str(BASE_DIR / 'db.sqlite3'))
 
-if USE_SQLITE:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
-else:
+if USE_POSTGRES and not USE_SQLITE:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -99,6 +95,13 @@ else:
             'OPTIONS': {
                 'options': os.getenv('POSTGRES_OPTIONS', '-c search_path=ivt,public'),
             },
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': SQLITE_NAME,
         }
     }
 

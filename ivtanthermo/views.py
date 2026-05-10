@@ -4,6 +4,7 @@ from django.db.models import OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, render
 
+from .charge_utils import coerce_float_array
 from .models import BibAuthorRef, DataBibRef, GibbsCoef, MoleculeProp, SubstanceName, Thermo
 
 
@@ -228,7 +229,7 @@ def thermo_detail(request, thermo_id):
         .select_related("approx", "cond_phase")
         .order_by("tmin", "id")
     ):
-        data = list(coef.data or [])
+        data = coerce_float_array(coef.data)
         coefficients.append(
             {
                 "approx_label": getattr(coef.approx, "label", ""),

@@ -4,6 +4,7 @@ from django.test import RequestFactory, SimpleTestCase, TestCase
 
 from . import admin as admin_module
 from . import models as app_models
+from .charge_utils import parse_charge_from_label
 from . import views
 
 
@@ -52,6 +53,14 @@ class AdminRegistrationTests(TestCase):
 
 
 class ThermoViewHelperTests(SimpleTestCase):
+    def test_parse_charge_from_label(self):
+        self.assertEqual(parse_charge_from_label("H(+g)"), 1)
+        self.assertEqual(parse_charge_from_label("H2(+g)"), 1)
+        self.assertEqual(parse_charge_from_label("O(+2g)"), 2)
+        self.assertEqual(parse_charge_from_label("U(+g;+3)"), 3)
+        self.assertEqual(parse_charge_from_label("e(-g)"), -1)
+        self.assertEqual(parse_charge_from_label("H2O(g)"), 0)
+
     def test_build_temperature_grid_keeps_bounds(self):
         grid = views._build_temperature_grid(298.15, 1500, points=5)
 

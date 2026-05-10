@@ -13,10 +13,15 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views import View
 
+from equilibrium.models import SavedCalculation
+from ivtanthermo.charge_utils import build_substance_charge_map, parse_charge_from_label
+from ivtanthermo.models import MoleculeProp, Substance
+
 from .models import ParsedPoint
 
 
 DEFAULT_TEMPERATURE = "default"
+EQUILIBR_DISPLAY_AMOUNT_THRESHOLD = 1e-12
 
 
 class ParseError(Exception):
@@ -280,12 +285,109 @@ def analyze_r_squared_by_temperature(
 
 def get_plot_history() -> list:
     qs = (
-        ParsedPoint.objects.filter(source="file4")
+        ParsedPoint.objects
         .values("batch_id")
         .annotate(created_at=Min("created_at"))
         .order_by("-created_at")
     )
     return list(qs)
+
+
+def get_equilibrium_saved_calculations(limit: int = 24) -> list[SavedCalculation]:
+    return list(
+        SavedCalculation.objects.exclude(result_payload__isnull=True)
+        .order_by("-created_at", "-id")[:limit]
+    )
+
+
+def format_temperature_token(value) -> str:
+    if value in (None, "", DEFAULT_TEMPERATURE):
+        return DEFAULT_TEMPERATURE
+    return f"{float(value):g}"
+
+
+def _species_mass_to_charge_map(species_labels: list[str]) -> dict[str, float]:
+    mapping: dict[str, float] = {}
+    substances = Substance.objects.filter(label__in=species_labels).select_related("molecule")
+    charge_map = build_substance_charge_map(substances)
+    for substance in substances:
+        molecule = substance.molecule
+        molecule_prop = (
+            MoleculeProp.objects.filter(molecule=molecule)
+            .order_by("-recommended", "id")
+            .first()
+        )
+        mass = molecule_prop.mass if molecule_prop and molecule_prop.mass else None
+        if mass is None:
+            continue
+        charge = abs(charge_map.get(substance.id, parse_charge_from_label(substance.label)))
+        if charge <= 0:
+            continue
+        mapping[substance.label] = float(mass) / float(charge)
+    return mapping
+
+
+def build_dataframe_from_equilibrium_saved(saved_calculation: SavedCalculation) -> pd.DataFrame:
+    payload = saved_calculation.result_payload or {}
+    temperature_series_rows = payload.get("temperature_series_rows") or []
+    concentration_rows = payload.get("concentration_rows") or []
+    primary_temperature = payload.get("primary_temperature")
+
+    source_rows = []
+    if concentration_rows:
+        temperature = format_temperature_token(primary_temperature)
+        for row in concentration_rows:
+            source_rows.append(
+                {
+                    "temperature": temperature,
+                    "species": row.get("species", ""),
+                    "y_value": float(row.get("mole_fraction", 0.0)),
+                }
+            )
+    elif temperature_series_rows:
+        for row in temperature_series_rows:
+            if float(row.get("amount", 0.0)) < EQUILIBR_DISPLAY_AMOUNT_THRESHOLD:
+                continue
+            source_rows.append(
+                {
+                    "temperature": format_temperature_token(row.get("temperature")),
+                    "species": row.get("species", ""),
+                    "y_value": float(row.get("mole_fraction", 0.0)),
+                }
+            )
+
+    if not source_rows:
+        raise ValueError("В сохранённом расчёте Equilibr нет концентраций для импорта.")
+
+    species_labels = sorted({row["species"] for row in source_rows if row["species"]})
+    mass_to_charge_map = _species_mass_to_charge_map(species_labels)
+    if not mass_to_charge_map:
+        raise ValueError("В сохранённом расчёте Equilibr не найдено ионов с определимым m/z.")
+
+    filtered_rows = []
+    for row in source_rows:
+        species = row["species"]
+        mass_to_charge = mass_to_charge_map.get(species)
+        if mass_to_charge is None:
+            continue
+        y_value = float(row["y_value"])
+        if y_value <= 0:
+            continue
+        filtered_rows.append(
+            {
+                "temperature": row["temperature"],
+                "mass_to_charge": mass_to_charge,
+                "x_value": mass_to_charge,
+                "y_value": y_value,
+            }
+        )
+
+    if not filtered_rows:
+        raise ValueError("После фильтрации не осталось ионных точек для ICP Stat.")
+
+    df = pd.DataFrame(filtered_rows).sort_values(["temperature", "x_value"]).reset_index(drop=True)
+    df["point_index"] = df.groupby("temperature").cumcount() + 1
+    return df[["point_index", "temperature", "mass_to_charge", "x_value", "y_value"]]
 
 
 @transaction.atomic
@@ -347,38 +449,44 @@ class GraphPageView(View):
         r_squared_plot_div = ""
         file1_text = ""
         file2_text = ""
+        equilibrium_saved_calculations = get_equilibrium_saved_calculations()
 
         if batch_id:
             file1_text = build_file1_text(batch_id)
             file2_text = build_file2_text(batch_id)
             temperatures = get_available_temperatures(batch_id)
+            has_file1 = bool(file1_text.strip())
             if temperatures and selected_temperature not in temperatures:
                 selected_temperature = temperatures[0]
 
-            if selected_temperature or "" in temperatures:
+            if has_file1 and (selected_temperature or "" in temperatures):
                 df4 = load_source_dataframe("file4", batch_id=batch_id, temperature=selected_temperature)
-                if df4.empty or df4["mass_to_charge"].isna().all():
-                    result = build_file4_from_file1_file2(batch_id=batch_id, temperature=selected_temperature)
-                    df4 = result["dataframe"]
-                    regression = result["regression"]
-                else:
-                    regression = calculate_regression(df4)
+                try:
+                    if df4.empty or df4["mass_to_charge"].isna().all():
+                        result = build_file4_from_file1_file2(batch_id=batch_id, temperature=selected_temperature)
+                        df4 = result["dataframe"]
+                        regression = result["regression"]
+                    else:
+                        regression = calculate_regression(df4)
+                except ValueError as exc:
+                    error_message = error_message or str(exc)
 
-            default_min, default_max = get_temperature_range_bounds(temperatures)
-            if not range_min:
-                range_min = default_min
-            if not range_max:
-                range_max = default_max
-            r_squared_by_temperature, max_r_squared_result = analyze_r_squared_by_temperature(
-                batch_id=batch_id,
-                temperatures=temperatures,
-                min_temperature=range_min,
-                max_temperature=range_max,
-            )
-            r_squared_plot_div = self._build_r_squared_temperature_plot(
-                r_squared_by_temperature,
-                max_r_squared_result,
-            )
+            if has_file1:
+                default_min, default_max = get_temperature_range_bounds(temperatures)
+                if not range_min:
+                    range_min = default_min
+                if not range_max:
+                    range_max = default_max
+                r_squared_by_temperature, max_r_squared_result = analyze_r_squared_by_temperature(
+                    batch_id=batch_id,
+                    temperatures=temperatures,
+                    min_temperature=range_min,
+                    max_temperature=range_max,
+                )
+                r_squared_plot_div = self._build_r_squared_temperature_plot(
+                    r_squared_by_temperature,
+                    max_r_squared_result,
+                )
 
         graph_div = self._build_plot(df4, regression, selected_temperature)
         history = get_plot_history()
@@ -398,6 +506,7 @@ class GraphPageView(View):
             "r_squared_plot_div": r_squared_plot_div,
             "file1_text": file1_text,
             "file2_text": file2_text,
+            "equilibrium_saved_calculations": equilibrium_saved_calculations,
         }
         return render(request, self.template_name, context)
 
@@ -407,6 +516,7 @@ class GraphPageView(View):
 
         batch_id = request.POST.get("batch_id") or str(uuid.uuid4())[:8]
         requested_temperature = request.POST.get("selected_temperature", "")
+        action = request.POST.get("action", "upload")
 
         file1 = request.FILES.get("file1")
         text1_val = request.POST.get("file1_text")
@@ -415,6 +525,30 @@ class GraphPageView(View):
         text2_val = request.POST.get("file2_text")
 
         try:
+            if action == "import_equilibrium":
+                equilibrium_id = request.POST.get("equilibrium_calculation_id")
+                if not equilibrium_id:
+                    raise ValueError("Выберите сохранённый расчёт Equilibr для импорта.")
+
+                saved_calculation = SavedCalculation.objects.filter(pk=equilibrium_id).first()
+                if not saved_calculation:
+                    raise ValueError("Сохранённый расчёт Equilibr не найден.")
+
+                imported_df = build_dataframe_from_equilibrium_saved(saved_calculation)
+                save_dataframe_to_db(imported_df, "file2", batch_id)
+                ParsedPoint.objects.filter(source="file4", batch_id=batch_id).delete()
+
+                temperatures = get_available_temperatures(batch_id)
+                selected_temperature = requested_temperature if requested_temperature in temperatures else ""
+                if not selected_temperature and temperatures:
+                    selected_temperature = temperatures[0]
+
+                if not load_source_dataframe("file1", batch_id=batch_id).empty and (selected_temperature or "" in temperatures):
+                    build_file4_from_file1_file2(batch_id=batch_id, temperature=selected_temperature)
+
+                query_string = urlencode({"batch_id": batch_id, "temperature": selected_temperature})
+                return redirect(f"{request.path}?{query_string}")
+
             if file1:
                 text1 = read_uploaded_text_file(file1)
                 df1 = parse_text_points(text1)
