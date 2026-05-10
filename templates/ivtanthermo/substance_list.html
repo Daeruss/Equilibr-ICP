@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Вещества | Equilibr{% endblock %}
+
+{% block content %}
+<ol class="breadcrumbs">
+    <li><a href="{% url 'substance-list' %}">Главная</a></li>
+    <li>Вещества</li>
+</ol>
+
+<section class="section">
+    <div class="page-header">
+        <div>
+            <h1>Термофизические данные</h1>
+            <div class="subtle">Показаны первые 100 веществ из текущей базы данных.</div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+        <tr>
+            <th>Обозначение</th>
+            <th>Название</th>
+            <th>Формула</th>
+            <th>Фаза</th>
+            <th>Изменено</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for thermo in thermos %}
+            <tr>
+                <td><a href="{% url 'thermo-detail' thermo.id %}">{{ thermo.substance.label }}</a></td>
+                <td>{{ thermo.default_name|default:"-" }}</td>
+                <td>{{ thermo.substance.molecule.formula }}</td>
+                <td>{{ thermo.substance.phase.name_ru|default:thermo.substance.phase.name_en|default:thermo.substance.phase.label }}</td>
+                <td>{{ thermo.datainfo.modified|date:"d.m.Y" }}</td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="5" class="empty">По текущему запросу вещества не найдены.</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

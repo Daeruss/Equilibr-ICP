@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block title %}{{ substance.label }} | Equilibr{% endblock %}
+
+{% block content %}
+<ol class="breadcrumbs">
+    <li><a href="{% url 'substance-list' %}">Главная</a></li>
+    <li><a href="{% url 'substance-list' %}">Вещества</a></li>
+    <li>{{ substance.label }}</li>
+</ol>
+
+<section class="section">
+    <div class="page-header">
+        <div>
+            <h1>Термофизические свойства: {{ display_name }}, {{ substance.label }}</h1>
+            <div class="subtle">Thermo record #{{ thermo.id }}</div>
+        </div>
+        <div>
+            <div class="subtle">Version</div>
+            <select onchange="if (this.value) window.location.href=this.value;">
+                {% for version in versions %}
+                    <option value="{% url 'thermo-detail' version.id %}" {% if version.id == thermo.id %}selected{% endif %}>
+                        Version {{ version.id }}, modified {{ version.datainfo.modified|date:"d.m.Y" }}{% if version.datainfo.release_no != None %}, release #{{ version.datainfo.release_no }}{% endif %}{% if version.recommended %}, recommended{% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div class="content-grid">
+        <div class="section">
+            <table>
+                <thead>
+                <tr>
+                    <th>Свойство</th>
+                    <th>Значение</th>
+                    <th>Единицы</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for row in property_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.value|floatformat:3 }}</td>
+                        <td>{{ row.units }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <dl class="meta-list">
+                <div>
+                    <dt>Формула</dt>
+                    <dd>{{ substance.molecule.formula }}</dd>
+                </div>
+                <div>
+                    <dt>Номер CAS</dt>
+                    <dd>{{ substance.cas|default:"-" }}</dd>
+                </div>
+                <div>
+                    <dt>Фаза</dt>
+                    <dd>{{ phase_name }}</dd>
+                </div>
+                <div>
+                    <dt>Реакция диссоциации</dt>
+                    <dd>{{ substance.reaction|default:"-" }}</dd>
+                </div>
+                <div>
+                    <dt>Выпуск</dt>
+                    <dd>{% if release_no != None %}{{ release_no }}{% else %}-{% endif %}</dd>
+                </div>
+                <div>
+                    <dt>Изменено</dt>
+                    <dd>{{ modified_at|date:"d.m.Y" }}</dd>
+                </div>
+            </dl>
+
+            {% if names %}
+                <h3>Названия</h3>
+                <ul class="tag-list">
+                    {% for name in names %}
+                        <li class="tag">{{ name.name_ru|default:name.name_en }}{% if name.name_ru and name.name_en %} / {{ name.name_en }}{% endif %}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+
+            {% if note_en or note_ru %}
+                <div class="section" style="margin-top: 16px;">
+                    <h3 style="margin-top: 0;">Примечания</h3>
+                    {% if note_ru %}<p>{{ note_ru }}</p>{% endif %}
+                    {% if note_en %}<p>{{ note_en }}</p>{% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="stats-grid">
+        <div class="stat">
+            <div class="stat-label">Интервалы аппроксимации</div>
+            <div class="stat-value">{{ coefficients|length }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">Источники</div>
+            <div class="stat-value">{{ references|length }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">Рекомендовано</div>
+            <div class="stat-value">{% if thermo.recommended %}Да{% else %}Нет{% endif %}</div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <h2 style="margin-top: 0;">Температурные зависимости</h2>
+    <div class="chart-grid">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>Теплоемкость, Cp</h3>
+            </div>
+            <div class="chart-frame">
+                <div id="chart-cp"></div>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>Функция Гиббса</h3>
+                <div class="segmented" data-chart-toggle="chart-phi">
+                    <button type="button" class="is-active" data-series="phi">Приведенная энергия Гиббса</button>
+                    <button type="button" data-series="g">Энергия Гиббса</button>
+                </div>
+            </div>
+            <div class="chart-frame">
+                <div id="chart-phi"></div>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>Энтропия, S</h3>
+            </div>
+            <div class="chart-frame">
+                <div id="chart-s"></div>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>Энтальпия</h3>
+                <div class="segmented" data-chart-toggle="chart-dh">
+                    <button type="button" class="is-active" data-series="dh">Приращение</button>
+                    <button type="button" data-series="h">Абсолютная</button>
+                </div>
+            </div>
+            <div class="chart-frame">
+                <div id="chart-dh"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <h2 style="margin-top: 0;">Коэффициенты аппроксимации</h2>
+    {% if coefficients %}
+        <table>
+            <thead>
+            <tr>
+                <th>Approx.</th>
+                <th>Tmin, K</th>
+                <th>Tmax, K</th>
+                <th>f1</th>
+                <th>f2</th>
+                <th>f3</th>
+                <th>f4</th>
+                <th>f5</th>
+                <th>f6</th>
+                <th>f7</th>
+                <th>Фаза</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for row in coefficients %}
+                <tr>
+                    <td>{{ row.approx_label }}</td>
+                    <td>{{ row.tmin|floatformat:2 }}</td>
+                    <td>{{ row.tmax|floatformat:2 }}</td>
+                    {% for value in row.formatted %}
+                        <td>{{ value }}</td>
+                    {% endfor %}
+                    <td>{{ row.phase|default:"-" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="empty">Для этой записи коэффициенты аппроксимации отсутствуют.</div>
+    {% endif %}
+</section>
+
+<section class="section">
+    <h2 style="margin-top: 0;">Источники</h2>
+    {% if references %}
+        {% for ref in references %}
+            <div class="reference-item">
+                <div><strong>{{ ref.label }}</strong>{% if ref.type %} <span class="subtle">({{ ref.type }})</span>{% endif %}</div>
+                <div>{{ ref.citation }}</div>
+                <div class="link-list" style="margin-top: 8px;">
+                    {% if ref.doi %}<a href="https://doi.org/{{ ref.doi }}" target="_blank" rel="noreferrer">DOI</a>{% endif %}
+                    {% if ref.link %}<a href="{{ ref.link }}" target="_blank" rel="noreferrer">Source</a>{% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty">Для этого набора данных источники не указаны.</div>
+    {% endif %}
+</section>
+
+{{ chart_data|json_script:"chart-data" }}
+<script>
+    const chartData = JSON.parse(document.getElementById("chart-data").textContent);
+
+    const chartMeta = {
+        cp: {title: "Теплоемкость, Cp", units: "Дж/моль/К"},
+        phi: {title: "Приведенная энергия Гиббса, Phi", units: "Дж/моль/К"},
+        g: {title: "Энергия Гиббса, G", units: "кДж/моль"},
+        s: {title: "Энтропия, S", units: "Дж/моль/К"},
+        dh: {title: "Приращение энтальпии, H(T) - H(0)", units: "кДж/моль"},
+        h: {title: "Энтальпия, H", units: "кДж/моль"}
+    };
+
+    function renderLineChart(containerId, seriesKey) {
+        const container = document.getElementById(containerId);
+        const points = (chartData[seriesKey] || []).filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+        if (!points.length) {
+            container.innerHTML = '<div class="empty">Данные для графика отсутствуют.</div>';
+            return;
+        }
+
+        const width = 920;
+        const height = 300;
+        const padding = {top: 20, right: 20, bottom: 42, left: 64};
+        const xMin = Math.min(...points.map(point => point.x));
+        const xMax = Math.max(...points.map(point => point.x));
+        let yMin = Math.min(...points.map(point => point.y));
+        let yMax = Math.max(...points.map(point => point.y));
+
+        if (yMin === yMax) {
+            yMin -= 1;
+            yMax += 1;
+        }
+
+        const xScale = value => padding.left + ((value - xMin) / (xMax - xMin || 1)) * (width - padding.left - padding.right);
+        const yScale = value => height - padding.bottom - ((value - yMin) / (yMax - yMin || 1)) * (height - padding.top - padding.bottom);
+        const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xScale(point.x).toFixed(2)} ${yScale(point.y).toFixed(2)}`).join(' ');
+
+        const yTicks = Array.from({length: 5}, (_, index) => yMin + ((yMax - yMin) / 4) * index);
+        const xTicks = Array.from({length: 6}, (_, index) => xMin + ((xMax - xMin) / 5) * index);
+
+        const svg = `
+            <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${chartMeta[seriesKey].title}">
+                <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>
+                ${yTicks.map(value => `
+                    <line x1="${padding.left}" y1="${yScale(value)}" x2="${width - padding.right}" y2="${yScale(value)}" stroke="#e2e8f0" stroke-width="1"></line>
+                    <text x="${padding.left - 8}" y="${yScale(value) + 4}" text-anchor="end" font-size="12" fill="#475569">${value.toFixed(2)}</text>
+                `).join('')}
+                ${xTicks.map(value => `
+                    <line x1="${xScale(value)}" y1="${padding.top}" x2="${xScale(value)}" y2="${height - padding.bottom}" stroke="#f1f5f9" stroke-width="1"></line>
+                    <text x="${xScale(value)}" y="${height - 16}" text-anchor="middle" font-size="12" fill="#475569">${value.toFixed(0)}</text>
+                `).join('')}
+                <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" stroke="#334155" stroke-width="1.5"></line>
+                <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${height - padding.bottom}" stroke="#334155" stroke-width="1.5"></line>
+                <path d="${path}" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></path>
+                <text x="${width / 2}" y="${height - 4}" text-anchor="middle" font-size="13" fill="#334155">Температура, K</text>
+                <text x="18" y="${height / 2}" text-anchor="middle" font-size="13" fill="#334155" transform="rotate(-90 18 ${height / 2})">${chartMeta[seriesKey].units}</text>
+            </svg>
+        `;
+
+        container.innerHTML = svg;
+    }
+
+    renderLineChart("chart-cp", "cp");
+    renderLineChart("chart-phi", "phi");
+    renderLineChart("chart-s", "s");
+    renderLineChart("chart-dh", "dh");
+
+    document.querySelectorAll("[data-chart-toggle]").forEach(group => {
+        const containerId = group.dataset.chartToggle;
+        const buttons = group.querySelectorAll("button");
+        buttons.forEach(button => {
+            button.addEventListener("click", () => {
+                buttons.forEach(item => item.classList.remove("is-active"));
+                button.classList.add("is-active");
+                renderLineChart(containerId, button.dataset.series);
+            });
+        });
+    });
+</script>
+{% endblock %}

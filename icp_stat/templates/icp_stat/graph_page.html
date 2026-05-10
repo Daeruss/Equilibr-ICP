@@ -1,0 +1,556 @@
+{% extends "base.html" %}
+
+{% block title %}ICP Stat | Equilibr{% endblock %}
+
+{% block extra_head %}
+<style>
+    .icp-page {
+        display: grid;
+        gap: 16px;
+    }
+
+    .icp-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+    }
+
+    .icp-header h1 {
+        margin: 0 0 6px;
+        font-size: 30px;
+        line-height: 1.15;
+    }
+
+    .icp-subtitle {
+        margin: 0;
+        max-width: 860px;
+        color: var(--muted);
+    }
+
+    .icp-toolbar,
+    .icp-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .icp-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+        gap: 16px;
+        align-items: start;
+    }
+
+    .icp-main {
+        display: grid;
+        gap: 16px;
+        min-width: 0;
+    }
+
+    .icp-side {
+        min-width: 0;
+    }
+
+    .icp-page.history-collapsed .icp-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .icp-page.history-collapsed .icp-side {
+        display: none;
+    }
+
+    .icp-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .icp-source {
+        display: grid;
+        gap: 12px;
+        min-width: 0;
+        padding: 16px;
+        background: var(--surface-alt);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+    }
+
+    .icp-source-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .icp-source-head h3 {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.25;
+    }
+
+    .icp-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: #134e4a;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .icp-hint {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+    }
+
+    .icp-page textarea {
+        min-height: 220px;
+    }
+
+    .icp-page input[type="file"] {
+        width: 100%;
+        min-height: 42px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font: inherit;
+        background: #fff;
+        color: var(--text);
+    }
+
+    .icp-page input[type="number"] {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font: inherit;
+        background: #fff;
+        color: var(--text);
+    }
+
+    .icp-alert {
+        border: 1px solid #fecaca;
+        background: #fef2f2;
+        color: #991b1b;
+        border-radius: 8px;
+        padding: 12px 14px;
+        font-weight: 600;
+    }
+
+    .icp-group {
+        display: grid;
+        gap: 4px;
+    }
+
+    .icp-group h2 {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.25;
+    }
+
+    .icp-group p {
+        margin: 0;
+        color: var(--muted);
+    }
+
+    .icp-metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .icp-metric {
+        padding: 14px;
+        background: var(--surface-alt);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+    }
+
+    .icp-metric-label {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .icp-metric-value {
+        display: block;
+        overflow-wrap: anywhere;
+        font-size: 21px;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    .icp-range {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 180px)) auto;
+        gap: 10px;
+        align-items: end;
+    }
+
+    .icp-history {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .icp-history a,
+    .icp-history-empty {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 44px;
+        padding: 10px 12px;
+        background: var(--surface-alt);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        text-decoration: none;
+    }
+
+    .icp-history a:hover {
+        border-color: var(--accent);
+        background: #f0fdfa;
+    }
+
+    .icp-history-date {
+        font-weight: 700;
+    }
+
+    .icp-history-id,
+    .icp-history-empty {
+        color: var(--muted);
+        font-size: 13px;
+    }
+
+    .icp-plot .js-plotly-plot,
+    .icp-plot .plot-container {
+        width: 100% !important;
+    }
+
+    @media (max-width: 1050px) {
+        .icp-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 760px) {
+        .icp-header,
+        .icp-grid,
+        .icp-metrics,
+        .icp-range {
+            grid-template-columns: 1fr;
+            display: grid;
+        }
+
+        .icp-toolbar,
+        .icp-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="icp-app" class="icp-page">
+    <ol class="breadcrumbs">
+        <li><a href="{% url 'substance-list' %}">Главная</a></li>
+        <li>ICP Stat</li>
+    </ol>
+
+    <section class="section">
+        <div class="icp-header">
+            <div>
+                <h1>ICP Stat</h1>
+                <p class="icp-subtitle">Сравнение масс-спектров с расчетными концентрациями по температурным сериям.</p>
+            </div>
+            <div class="icp-toolbar">
+                <button class="button" id="historyToggle" type="button" aria-controls="historyColumn" aria-expanded="true">Скрыть историю</button>
+                <a href="{% url 'icp_stat:graph-page' %}" class="button" style="background: #475569;">Новый расчет</a>
+            </div>
+        </div>
+    </section>
+
+    {% if error_message %}
+        <div class="icp-alert">Ошибка: {{ error_message }}</div>
+    {% endif %}
+
+    <div class="icp-layout">
+        <div class="icp-main">
+            <section class="section">
+                <div class="page-header" style="margin-bottom: 16px;">
+                    <div>
+                        <h2 style="margin: 0;">Исходные данные</h2>
+                    </div>
+                </div>
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {% if batch_id %}
+                        <input type="hidden" name="batch_id" value="{{ batch_id }}">
+                        <input type="hidden" name="selected_temperature" value="{{ selected_temperature }}">
+                    {% endif %}
+
+                    <div class="icp-grid">
+                        <div class="icp-source">
+                            <div class="icp-source-head">
+                                <h3>Файл 1</h3>
+                                <span class="icp-badge">file1</span>
+                            </div>
+                            <div class="field">
+                                <label for="file1">Зависимость интенсивностей масс-спектров</label>
+                                <input id="file1" name="file1" type="file" accept=".txt">
+                            </div>
+                            <div class="field">
+                                <label for="file1_text">Данные интенсивностей</label>
+                                <p class="icp-hint">Столбцы: 1 - m/z, 2 - интенсивность масс-спектра.</p>
+                                <textarea id="file1_text" name="file1_text" placeholder="10 100&#10;20 200&#10;30 400&#10;40 800">{{ file1_text }}</textarea>
+                            </div>
+                        </div>
+
+                        <div class="icp-source">
+                            <div class="icp-source-head">
+                                <h3>Файл 2</h3>
+                                <span class="icp-badge">file2</span>
+                            </div>
+                            <div class="field">
+                                <label for="file2">Рассчитанные концентрации по температурам</label>
+                                <input id="file2" name="file2" type="file" accept=".txt">
+                                <p class="icp-hint">Формат строки: температура, m/z, рассчитанная концентрация.</p>
+                            </div>
+                            <div class="field">
+                                <label for="file2_text">Данные концентраций</label>
+                                <p class="icp-hint">Столбцы: 1 - температура, 2 - m/z, 3 - рассчитанная концентрация.</p>
+                                <textarea id="file2_text" name="file2_text" placeholder="300 10 50&#10;300 20 120&#10;600 10 80&#10;600 20 170">{{ file2_text }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="icp-actions" style="margin-top: 16px;">
+                        <button class="button" type="submit">{% if batch_id %}Сохранить изменения{% else %}Загрузить и построить{% endif %}</button>
+                        <a href="{% url 'icp_stat:graph-page' %}" class="button" style="background: #475569;">Очистить</a>
+                    </div>
+                </form>
+            </section>
+
+            {% if batch_id and temperatures %}
+                <div class="icp-group">
+                    <h2>Однотемпературный расчет</h2>
+                    <p>Выбор температуры, параметры аппроксимации и график для выбранного набора концентраций.</p>
+                </div>
+
+                <section class="section">
+                    <div class="page-header" style="margin-bottom: 16px;">
+                        <div>
+                            <h2 style="margin: 0;">Температура расчета</h2>
+                        </div>
+                    </div>
+                    <form method="get" class="field">
+                        <input type="hidden" name="batch_id" value="{{ batch_id }}">
+                        <input type="hidden" name="range_min" value="{{ range_min }}">
+                        <input type="hidden" name="range_max" value="{{ range_max }}">
+                        <label for="temperature">Выберите температуру для графика</label>
+                        <select id="temperature" name="temperature">
+                            {% for temperature in temperatures %}
+                                <option value="{{ temperature }}" {% if temperature == selected_temperature %}selected{% endif %}>
+                                    {% if temperature %}{{ temperature }}{% else %}без температуры{% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                    <div class="icp-actions" style="margin-top: 16px;">
+                        <a class="button" href="{% url 'icp_stat:export-csv' %}?batch_id={{ batch_id }}&temperature={{ selected_temperature }}">Скачать CSV выбранной температуры</a>
+                    </div>
+                </section>
+            {% endif %}
+
+            {% if regression %}
+                <section class="section">
+                    <div class="page-header" style="margin-bottom: 16px;">
+                        <div>
+                            <h2 style="margin: 0;">Параметры аппроксимации</h2>
+                        </div>
+                    </div>
+                    <div class="icp-metrics">
+                        <div class="icp-metric">
+                            <span class="icp-metric-label">Температура</span>
+                            <span class="icp-metric-value">{{ selected_temperature_label }}</span>
+                        </div>
+                        <div class="icp-metric">
+                            <span class="icp-metric-label">Наклон k</span>
+                            <span class="icp-metric-value">{{ regression.slope|floatformat:6 }}</span>
+                        </div>
+                        <div class="icp-metric">
+                            <span class="icp-metric-label">R²</span>
+                            <span class="icp-metric-value">{{ regression.r_squared|floatformat:6 }}</span>
+                        </div>
+                    </div>
+                </section>
+            {% endif %}
+
+            <section class="section icp-plot">
+                <div class="page-header" style="margin-bottom: 16px;">
+                    <div>
+                        <h2 style="margin: 0;">График выбранной температуры</h2>
+                    </div>
+                </div>
+                {{ graph_div|safe }}
+            </section>
+
+            {% if batch_id and temperatures %}
+                <div class="icp-group">
+                    <h2>Анализ максимального R²</h2>
+                    <p>Поиск температуры с максимальным коэффициентом R² в заданном диапазоне.</p>
+                </div>
+
+                <section class="section">
+                    <div class="page-header" style="margin-bottom: 16px;">
+                        <div>
+                            <h2 style="margin: 0;">Диапазон температур</h2>
+                        </div>
+                    </div>
+                    <form method="get" class="icp-range" id="rangeForm">
+                        <input type="hidden" name="batch_id" value="{{ batch_id }}">
+                        <input type="hidden" name="temperature" value="{{ selected_temperature }}">
+                        <div class="field">
+                            <label for="range_min">Температура от</label>
+                            <input id="range_min" name="range_min" type="number" step="any" value="{{ range_min }}">
+                        </div>
+                        <div class="field">
+                            <label for="range_max">Температура до</label>
+                            <input id="range_max" name="range_max" type="number" step="any" value="{{ range_max }}">
+                        </div>
+                        <button class="button" type="submit">Найти максимум R²</button>
+                    </form>
+                </section>
+            {% endif %}
+
+            {% if max_r_squared_result %}
+                <section class="section">
+                    <div class="page-header" style="margin-bottom: 16px;">
+                        <div>
+                            <h2 style="margin: 0;">Максимальный коэффициент R²</h2>
+                        </div>
+                    </div>
+                    <div class="icp-metrics">
+                        <div class="icp-metric">
+                            <span class="icp-metric-label">Температура</span>
+                            <span class="icp-metric-value">{{ max_r_squared_result.temperature }}</span>
+                        </div>
+                        <div class="icp-metric">
+                            <span class="icp-metric-label">R²</span>
+                            <span class="icp-metric-value">{{ max_r_squared_result.r_squared|floatformat:6 }}</span>
+                        </div>
+                    </div>
+                </section>
+            {% endif %}
+
+            {% if r_squared_plot_div %}
+                <section class="section icp-plot">
+                    <div class="page-header" style="margin-bottom: 16px;">
+                        <div>
+                            <h2 style="margin: 0;">График R² от температуры</h2>
+                        </div>
+                    </div>
+                    {{ r_squared_plot_div|safe }}
+                </section>
+            {% endif %}
+        </div>
+
+        <aside class="icp-side">
+            <section class="section" id="historyColumn">
+                <div class="page-header" style="margin-bottom: 16px;">
+                    <div>
+                        <h2 style="margin: 0;">История расчетов</h2>
+                    </div>
+                </div>
+                <ul class="icp-history">
+                    {% for item in history %}
+                        <li>
+                            <a href="?batch_id={{ item.batch_id }}">
+                                <span class="icp-history-date">{{ item.created_at|date:"d.m.Y H:i" }}</span>
+                                <span class="icp-history-id">{{ item.batch_id }}</span>
+                            </a>
+                        </li>
+                    {% empty %}
+                        <li class="icp-history-empty">История пока пуста</li>
+                    {% endfor %}
+                </ul>
+            </section>
+        </aside>
+    </div>
+</div>
+
+<script>
+    const appRoot = document.getElementById("icp-app");
+    const historyToggle = document.getElementById("historyToggle");
+    const historyColumn = document.getElementById("historyColumn");
+    const scrollStorageKey = "icpRestoreScrollY";
+
+    function resizePlots() {
+        if (!window.Plotly) {
+            return;
+        }
+        document.querySelectorAll(".js-plotly-plot").forEach((plotElement) => {
+            window.Plotly.Plots.resize(plotElement);
+        });
+    }
+
+    function setHistoryCollapsed(isCollapsed) {
+        appRoot.classList.toggle("history-collapsed", isCollapsed);
+        historyToggle.setAttribute("aria-expanded", String(!isCollapsed));
+        historyToggle.textContent = isCollapsed ? "Показать историю" : "Скрыть историю";
+        if (historyColumn) {
+            historyColumn.setAttribute("aria-hidden", String(isCollapsed));
+        }
+        localStorage.setItem("icpHistoryCollapsed", String(isCollapsed));
+        requestAnimationFrame(resizePlots);
+    }
+
+    function rememberScroll() {
+        localStorage.setItem(scrollStorageKey, String(window.scrollY));
+    }
+
+    function restoreScroll() {
+        const savedScrollY = localStorage.getItem(scrollStorageKey);
+        if (savedScrollY === null) {
+            return;
+        }
+        localStorage.removeItem(scrollStorageKey);
+        requestAnimationFrame(() => {
+            window.scrollTo({ top: Number(savedScrollY), left: 0, behavior: "instant" });
+        });
+    }
+
+    if (historyToggle) {
+        setHistoryCollapsed(localStorage.getItem("icpHistoryCollapsed") === "true");
+        historyToggle.addEventListener("click", () => {
+            setHistoryCollapsed(!appRoot.classList.contains("history-collapsed"));
+        });
+    }
+
+    const temperatureSelect = document.getElementById("temperature");
+    if (temperatureSelect) {
+        temperatureSelect.addEventListener("change", () => {
+            rememberScroll();
+            temperatureSelect.form.submit();
+        });
+    }
+
+    const rangeForm = document.getElementById("rangeForm");
+    if (rangeForm) {
+        rangeForm.addEventListener("submit", rememberScroll);
+    }
+
+    restoreScroll();
+    resizePlots();
+</script>
+{% endblock %}
